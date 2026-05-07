@@ -18,7 +18,9 @@ phases:
 
   build:
     commands:
-      - docker pull $ECR_URI 2>/dev/null || (docker pull $DOCKERHUB_USERNAME/whisper-lambda:$MODEL_TAG && docker tag $DOCKERHUB_USERNAME/whisper-lambda:$MODEL_TAG $ECR_URI && docker push $ECR_URI)
+      - docker pull $DOCKERHUB_USERNAME/whisper-lambda:$MODEL_TAG
+      - docker tag $DOCKERHUB_USERNAME/whisper-lambda:$MODEL_TAG $ECR_URI
+      - docker push $ECR_URI
 
   post_build:
     commands:
@@ -30,16 +32,3 @@ phases:
           aws lambda create-function --function-name $LAMBDA_FUNCTION --package-type Image --code ImageUri=$ECR_URI --role $LAMBDA_ROLE_ARN --timeout 300 --memory-size 3008 --region $AWS_REGION
           aws lambda wait function-active --function-name $LAMBDA_FUNCTION --region $AWS_REGION
         fi
-      # --- REST API (v1): create once, skip if already exists tset---
-      - |
-        LAMBDA_ARN=$(aws lambda get-function --function-name $LAMBDA_FUNCTION --region $AWS_REGION --query 'Configuration.FunctionArn' --output text)
-        API_ID=$(aws apigateway get-rest-apis --region $AWS_REGION --query "items[?name=='whisper-api-$DEPLOY_ENV'].id" --output text)
-        if [ -z "$API_ID" ]; then
-          API_ID=$(aws apigateway create-rest-api --name whisper-api-$DEPLOY_ENV --region $AWS_REGION --query 'id' --output text)
-          ROOT_ID=$(aws apigateway get-resources --rest-api-id $API_ID --region $AWS_REGION --query 'items[0].id' --output text)
-          aws apigateway put-method --rest-api-id $API_ID --resource-id $ROOT_ID --http-method POST --authorization-type NONE --region $AWS_REGION
-          aws apigateway put-integration --rest-api-id $API_ID --resource-id $ROOT_ID --http-method POST --type AWS_PROXY --integration-http-method POST --uri "arn:aws:apigateway:$AWS_REGION:lambda:path/2015-03-31/functions/$LAMBDA_ARN/invocations" --region $AWS_REGION
-          aws apigateway create-deployment --rest-api-id $API_ID --stage-name $DEPLOY_ENV --region $AWS_REGION
-          aws lambda add-permission --function-name $LAMBDA_FUNCTION --statement-id apigw-v1-$DEPLOY_ENV --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:$AWS_REGION:$AWS_ACCOUNT_ID:$API_ID/*/*" --region $AWS_REGION 2>/dev/null || true
-        fi
-        echo "API URL: https://$API_ID.execute-api.$AWS_REGION.amazonaws.com/$DEPLOY_ENV/"
