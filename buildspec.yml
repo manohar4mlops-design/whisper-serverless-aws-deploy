@@ -4,7 +4,7 @@ env:
   variables:
     AWS_REGION: "us-east-1"
     ECR_REPO_NAME: "whisper-lambda"
-    DOCKERHUB_USERNAME: "manohar4mlops-design"
+    DOCKERHUB_USERNAME: "03sarath"
     DEPLOY_ENV: "dev"
 
 phases:
